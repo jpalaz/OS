@@ -12,7 +12,8 @@ int* readersCount;
 
 HANDLE* hReadEnable;
 HANDLE* hModifyEnable;
-HANDLE hNamedPipe = 0;
+HANDLE hPipeConnected;
+
 HANDLE* hProcesserThreads;
 DWORD* IDProcesserThreads;
 
@@ -60,34 +61,15 @@ int main() {
 
 	hProcesserThreads = (HANDLE*)malloc(clientSize * sizeof(HANDLE));
 	IDProcesserThreads = (DWORD*)malloc(clientSize * sizeof(DWORD));
-	
-	SECURITY_ATTRIBUTES sa;
-	SECURITY_DESCRIPTOR sd;
 
-	sa.nLength = sizeof(sa);
-	sa.bInheritHandle = FALSE;	// дескриптор канала ненаследуемый
-	InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION); // инициализируем дескриптор защиты
-	SetSecurityDescriptorDacl(&sd, TRUE, NULL, FALSE); // –азрешаем доступ всем пользовател€м
-	sa.lpSecurityDescriptor = &sd;
-
-	hNamedPipe = CreateNamedPipeA("\\\\.\\pipe\\students", PIPE_ACCESS_DUPLEX,
-		PIPE_TYPE_BYTE| PIPE_WAIT, clientSize, 0, 0, INFINITE, &sa);
-
-	if (hNamedPipe == INVALID_HANDLE_VALUE) {
-		printf("\nLast Error: %d\nCreation of the named pipe failed.\nPress any key to finish.\n",
-			GetLastError());
-		getch();
-		exit(1);
-	}
-
-	//HANDLE hLauncher;
-	//DWORD IDLauncher;
 	int* threadIndex = (int*)malloc(clientSize * sizeof(int));
 	HANDLE hInitNamedPipe;
+	hPipeConnected = CreateEvent(NULL, FALSE, FALSE, NULL);
 
 	for (int i = 0; i < clientSize; ++i) {
 		threadIndex[i] = i;
-		hProcesserThreads[i] = CreateThread(NULL, 0, processer, (void*)threadIndex[i], 0, &IDProcesserThreads[i]);
+		hProcesserThreads[i] = CreateThread(0, 0, processer, (void*)threadIndex[i], 0, &IDProcesserThreads[i]);
+		WaitForSingleObject(hPipeConnected, INFINITE);
 	}
 	
 	WaitForMultipleObjects(clientSize, hProcesserThreads, TRUE, INFINITE);
@@ -100,7 +82,6 @@ int main() {
 	for (int i = 0; i < clientSize; ++i)
 		CloseHandle(hProcesserThreads[i]);
 
-	CloseHandle(hNamedPipe);
 	fclose(binaryFile);
 
 	free(hProcesserThreads);

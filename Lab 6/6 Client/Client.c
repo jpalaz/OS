@@ -16,11 +16,13 @@ struct Request {
 void requestStudentNumber();
 void outputStudent();
 void writeRequestToPipe();
+void writeReleaseToPipe();
 void readStudentFromPipe();
 
 HANDLE hNamedPipe;
 DWORD dwBytesRead, dwBytesWritten;
 int number;
+char release;
 
 int main() {
 	char pipeName[80];
@@ -42,22 +44,15 @@ int main() {
 		exit(1);
 	}
 
-	int id;
+	/*int id;
 	if (!WriteFile(hNamedPipe, &id, sizeof(id), &dwBytesWritten, (LPOVERLAPPED)NULL)) {
 		printf("Write request to the named pipe failed.\nPress any key to finish.\nLast error: %d\n",
 			GetLastError());
 		getch();
 		CloseHandle(hNamedPipe);
 		return;
-	}
+	}*/
 
-	//char readRequest[20], readStudent[20];
-	//wsprintf(readRequest, "ReadRequest");
-	//wsprintf(readStudent, "ReadStudent");
-	
-	//HANDLE hReadRequest = OpenEvent(EVENT_ALL_ACCESS, FALSE, readRequest);
-	//HANDLE hReadStudent = OpenEvent(EVENT_ALL_ACCESS, FALSE, readStudent);
-	
 	double grade;
 	char choice, name[10];
 
@@ -72,9 +67,7 @@ int main() {
 			request.number = number;
 			request.type = 1;
 
-			//SetEvent(hReadRequest);
 			writeRequestToPipe();
-			//WaitForSingleObject(hReadStudent, INFINITE);
 			readStudentFromPipe();
 			outputStudent();
 
@@ -86,18 +79,16 @@ int main() {
 			scanf("%lf", &grade);
 			student.grade = grade;
 
-			//SetEvent(hReadStudent);
 			if (!WriteFile(hNamedPipe, &student, sizeof(student), &dwBytesWritten, (LPOVERLAPPED)NULL)) {
 				printf("Write student to the named pipe failed.\nPress any key to finish.\n");
 				getch();
 				return GetLastError();
 			}
 
-			//ResetEvent(hReadRequest);
 			printf("Press any key to release modifier\n");
 			getch(); 
-			//SetEvent(hReadRequest);
 			fflush(stdin);
+			writeReleaseToPipe();
 
 			break;
 		
@@ -106,17 +97,14 @@ int main() {
 			request.number = number;
 			request.type = 2;
 
-			//SetEvent(hReadRequest);
 			writeRequestToPipe();
-			//WaitForSingleObject(hReadStudent, INFINITE);
 			readStudentFromPipe();
 			outputStudent();
 
-			//ResetEvent(hReadRequest);
 			printf("Press any key to release reader\n");
 			getch();
 			fflush(stdin);
-			//SetEvent(hReadRequest);
+			writeReleaseToPipe();
 
 			break;
 		
@@ -124,7 +112,6 @@ int main() {
 			request.number = 0;
 			request.type = 3;
 
-			//SetEvent(hReadRequest);
 			writeRequestToPipe();
 			system("pause");
 			return 0;
@@ -148,6 +135,16 @@ void writeRequestToPipe() {
 		getch();
 		CloseHandle(hNamedPipe);
 		return ;
+	}
+}
+
+void writeReleaseToPipe() {
+	if (!WriteFile(hNamedPipe, &release, sizeof(release), &dwBytesWritten, (LPOVERLAPPED)NULL)) {
+		printf("Write request to the named pipe failed.\nPress any key to finish.\nLast error: %d\n",
+			GetLastError());
+		getch();
+		CloseHandle(hNamedPipe);
+		return;
 	}
 }
 

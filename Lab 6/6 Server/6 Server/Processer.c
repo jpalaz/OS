@@ -9,17 +9,32 @@ struct Request {
 DWORD WINAPI processer(LPVOID parametr) { // 1.4. Serve requests
 	int id = (int)parametr;
 
-	//char readRequest[20], readStudent[20];
-	//wsprintf(readRequest, "ReadRequest", id);
-	//wsprintf(readStudent, "ReadStudent", id);
-
-	//HANDLE hReadRequest = CreateEvent(NULL, FALSE, FALSE, readRequest);
-	//HANDLE hReadStudent = CreateEvent(NULL, FALSE, FALSE, readStudent);
-
 	DWORD dwBytesRead, dwBytesWritten;
+	
 	int index;
+	char release;
+
 	struct Student student;
 	struct Request request;
+	
+	SECURITY_ATTRIBUTES sa;
+	sa.nLength = sizeof(sa);
+	sa.bInheritHandle = FALSE;	// дескриптор канала ненаследуемый
+
+	SECURITY_DESCRIPTOR sd;
+	InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION); // инициализируем дескриптор защиты
+	SetSecurityDescriptorDacl(&sd, TRUE, NULL, FALSE); // –азрешаем доступ всем пользовател€м
+	sa.lpSecurityDescriptor = &sd;
+
+	HANDLE hNamedPipe = CreateNamedPipeA("\\\\.\\pipe\\students", PIPE_ACCESS_DUPLEX,
+		PIPE_TYPE_MESSAGE | PIPE_WAIT | PIPE_READMODE_MESSAGE, clientSize, 0, 0, INFINITE, &sa);
+
+	if (hNamedPipe == INVALID_HANDLE_VALUE) {
+		printf("\nLast Error: %d\nCreation of the named pipe failed.\nPress any key to finish.\n",
+			GetLastError());
+		getch();
+		exit(1);
+	}
 
 	printf("The server is waiting for connection with a client.\n");
 	if (!ConnectNamedPipe(hNamedPipe, (LPOVERLAPPED)NULL)) {
@@ -30,18 +45,17 @@ DWORD WINAPI processer(LPVOID parametr) { // 1.4. Serve requests
 		exit(1);
 	}
 
-	printf("1");
+	printf("Thread %d connected!\n", id);
+	SetEvent(hPipeConnected);
 
 	while (1) {
-		//WaitForSingleObject(hReadRequest, INFINITE);
-
 		if (!ReadFile(hNamedPipe, &request, sizeof(request), &dwBytesRead, (LPOVERLAPPED)NULL)) {
 			printf("Read request from the named pipe failed.\nPress any key to finish.\nLast error: %d\n",
 				GetLastError());
 			system("pause");
 			return;
 		}
-		printf("2");
+
 		switch (request.type) {
 		case 1: // Modify
 			index = -1;
@@ -61,7 +75,6 @@ DWORD WINAPI processer(LPVOID parametr) { // 1.4. Serve requests
 
 			WaitForSingleObject(hModifyEnable[index], INFINITE);
 			ResetEvent(hReadEnable[index]);
-			//SetEvent(hReadStudent);
 			fseek(binaryFile, index * sizeof(struct Student), SEEK_SET);
 			fread((char *)(&student), sizeof(struct Student), 1, binaryFile);
 			
@@ -72,7 +85,6 @@ DWORD WINAPI processer(LPVOID parametr) { // 1.4. Serve requests
 				return;
 			}
 
-			//WaitForSingleObject(hReadStudent, INFINITE);
 			if (!ReadFile(hNamedPipe, &student, sizeof(student), &dwBytesRead, (LPOVERLAPPED)NULL)) {
 				printf("Read student from the named pipe failed.\nPress any key to finish.\nLast error: %d\n",
 					GetLastError());
@@ -83,7 +95,13 @@ DWORD WINAPI processer(LPVOID parametr) { // 1.4. Serve requests
 			fseek(binaryFile, index * sizeof(struct Student), SEEK_SET);
 			fwrite((char*)&student, sizeof(student), 1, binaryFile);
 			
-			//WaitForSingleObject(hReadRequest, INFINITE);
+			if (!ReadFile(hNamedPipe, &release, sizeof(release), &dwBytesRead, (LPOVERLAPPED)NULL)) {
+				printf("Read student from the named pipe failed.\nPress any key to finish.\nLast error: %d\n",
+					GetLastError());
+				system("pause");
+				return;
+			}
+
 			SetEvent(hModifyEnable[index]);
 			SetEvent(hReadEnable[index]);
 
@@ -108,8 +126,7 @@ DWORD WINAPI processer(LPVOID parametr) { // 1.4. Serve requests
 			WaitForSingleObject(hReadEnable[index], INFINITE);
 			readersCount[index]++;
 			ResetEvent(hModifyEnable[index]);
-			//SetEvent(hReadStudent);
-
+			
 			fseek(binaryFile, index * sizeof(struct Student), SEEK_SET);
 			fread((char *)(&student), sizeof(struct Student), 1, binaryFile);
 
@@ -120,7 +137,13 @@ DWORD WINAPI processer(LPVOID parametr) { // 1.4. Serve requests
 				return;
 			}
 
-			//WaitForSingleObject(hReadRequest, INFINITE);
+			if (!ReadFile(hNamedPipe, &release, sizeof(release), &dwBytesRead, (LPOVERLAPPED)NULL)) {
+				printf("Read student from the named pipe failed.\nPress any key to finish.\nLast error: %d\n",
+					GetLastError());
+				system("pause");
+				return;
+			}
+
 			readersCount[index]--;
 			if (readersCount[index] == 0)
 				SetEvent(hModifyEnable[index]);
@@ -128,10 +151,9 @@ DWORD WINAPI processer(LPVOID parametr) { // 1.4. Serve requests
 			break;
 
 		case 3:
-			//CloseHandle(hReadRequest);
-			//CloseHandle(hReadStudent);
-			//hReadRequest = CreateEvent(NULL, TRUE, FALSE, NULL);
+			printf("Thread %d disconnected from pipe!\n", id);
 			DisconnectNamedPipe(hNamedPipe);
+			CloseHandle(hNamedPipe);
 			return;
 		}
 	}
